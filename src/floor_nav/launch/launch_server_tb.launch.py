@@ -42,13 +42,13 @@ import launch_ros.descriptions
 
 def generate_launch_description():
     return LaunchDescription([
-        launch_ros.actions.Node(
-            package='joy', executable='joy_node', name='joy',
-            parameters=[
-                {'autorepeat_rate': 10.},
-                {'dev': "/dev/input/js0"},
-                ],
-            output='screen'),
+        # launch_ros.actions.Node(
+        #     package='joy', executable='joy_node', name='joy',
+        #     parameters=[
+        #         {'autorepeat_rate': 10.},
+        #         {'dev': "/dev/input/js0"},
+        #         ],
+        #     output='screen'),
 
 
         # launch_ros.actions.Node(
@@ -60,85 +60,85 @@ def generate_launch_description():
         #         {'~/only_forward': True},
         #         ],
         #     remappings=[
-        #         # ('~/clouds', '/points'),
+        #         ('~/clouds', '/points'),
         #         ('~/scans', '/scan'),
         #         ('~/vel_input', '/mux/safeCommand'),
         #         ('~/vel_output', '/mux/autoCommand'),
         #         ],
         #     output='screen'),
 
-        launch_ros.actions.Node(
-            package='obstacle_avoidance', executable='obstacle_avoidance', name='obstacle_avoidance',
-            parameters=[
-                {'~/base_frame': 'base_link'},
-                {'~/display': False},
-                {"~/max_range": 3.0},
-                {"~/max_linear_velocity": 0.1},
-                {"~/max_angular_velocity": 0.3},
-                {"~/max_linear_accel": 1.0},
-                {"~/max_angular_accel": 5.0},
-                {"~/map_resolution": 0.02},
-                {"~/linear_velocity_resolution": 0.01},
-                {"~/angular_velocity_resolution": 0.01},
-                {"~/robot_radius": 0.3},
-                {"~/time_horizon": 5.0},
-                {"~/k_v": 1.0},
-                {"~/k_w": 10.0},
-                ],
-            remappings=[
-                ('~/scans', '/scan'),
-                ('~/current_velocity', '/commands/velocity'),
-                ('~/output_velocity', '/mux/autoCommand'),
-                ('~/command_velocity', '/mux/safeCommand'),
-                ],
-            output='screen'),
+        # launch_ros.actions.Node(
+        #     package='obstacle_avoidance', executable='obstacle_avoidance', name='obstacle_avoidance',
+        #     parameters=[
+        #         {'~/base_frame': 'base_link'},
+        #         {'~/display': False},
+        #         {"~/max_range": 3.0},
+        #         {"~/max_linear_velocity": 0.1},
+        #         {"~/max_angular_velocity": 0.3},
+        #         {"~/max_linear_accel": 1.0},
+        #         {"~/max_angular_accel": 5.0},
+        #         {"~/map_resolution": 0.02},
+        #         {"~/linear_velocity_resolution": 0.01},
+        #         {"~/angular_velocity_resolution": 0.01},
+        #         {"~/robot_radius": 0.3},
+        #         {"~/time_horizon": 5.0},
+        #         {"~/k_v": 1.0},
+        #         {"~/k_w": 10.0},
+        #         ],
+        #     remappings=[
+        #         ('~/scans', '/scan'),
+        #         ('~/current_velocity', '/commands/velocity'),
+        #         ('~/output_velocity', '/mux/autoCommand'),
+        #         ('~/command_velocity', '/mux/safeCommand'),
+        #         ],
+        #     output='screen'),
 
-        launch_ros.actions.Node(
-            package='topic_tools', executable='mux', name='cmd_mux',
-            parameters=[
-                {'output_topic': '/velocity_smoother/input'},
-                {'input_topics': ['/teleop/twistCommand','/mux/autoCommand']},
-                ],
-            output='screen'),
+        # launch_ros.actions.Node(
+        #     package='topic_tools', executable='mux', name='cmd_mux',
+        #     parameters=[
+        #         {'output_topic': '/velocity_smoother/input'},
+        #         {'input_topics': ['/teleop/twistCommand','/mux/autoCommand']},
+        #         ],
+        #     output='screen'),
 
-        launch_ros.actions.Node(
-            package='vrep_ros_teleop', executable='teleop_node', name='teleop',
-            parameters=[
-                {'~/axis_linear_x': 1},
-                {'~/axis_angular': 0},
-                {'~/scale_linear_x': 0.2},
-                {'~/scale_angular': 1.},
-                {'~/timeout': 1.0}
-                ],
-            remappings=[
-                ('twistCommand', '/teleop/twistCommand'),
-                ],
-            output='screen'),
+        # launch_ros.actions.Node(
+        #     package='vrep_ros_teleop', executable='teleop_node', name='teleop',
+        #     parameters=[
+        #         {'~/axis_linear_x': 1},
+        #         {'~/axis_angular': 0},
+        #         {'~/scale_linear_x': 0.2},
+        #         {'~/scale_angular': 1.},
+        #         {'~/timeout': 1.0}
+        #         ],
+        #     remappings=[
+        #         ('twistCommand', '/teleop/twistCommand'),
+        #         ],
+        #     output='screen'),
 
-        launch_ros.actions.Node(
-            package='vrep_ros_teleop', executable='teleop_mux_node', name='teleop_mux',
-            parameters=[
-                {'~/joystick_button': 0},
-                {'~/joystick_topic': '/teleop/twistCommand'},
-                {'~/auto_button': 1},
-                {'~/auto_topic': '/mux/autoCommand'}
-                ],
-            remappings=[
-                ('select', '/cmd_mux/select'),
-                ],
-            output='screen'),
+        # launch_ros.actions.Node(
+        #     package='vrep_ros_teleop', executable='teleop_mux_node', name='teleop_mux',
+        #     parameters=[
+        #         {'~/joystick_button': 0},
+        #         {'~/joystick_topic': '/teleop/twistCommand'},
+        #         {'~/auto_button': 1},
+        #         {'~/auto_topic': '/mux/autoCommand'}
+        #         ],
+        #     remappings=[
+        #         ('select', '/cmd_mux/select'),
+        #         ],
+        #     output='screen'),
 
         launch_ros.actions.Node(
             package='floor_nav', executable='floornav_task_server', name='floor_tasks',
             parameters=[
                 {'lib_path': os.path.join(os.getenv("HOME"),"ros2_ws/install/floor_nav/lib/floor_nav")},
                 {'base_frame': 'base_link'},
-                {'reference_frame': 'map'},
+                {'reference_frame': 'odom'},
                 ],
             remappings=[
-                #('~/clouds3d', '/points'),
+                # ('~/clouds3d', '/points'),
                 ('~/scans', '/scan'),
-                ('/mux/autoCommand', '/mux/safeCommand'),
+                ('/mux/autoCommand', '/mux/autoCommand'),
                 ],
             output='screen'),
 

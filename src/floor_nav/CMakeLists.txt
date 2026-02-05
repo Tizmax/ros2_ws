@@ -129,7 +129,7 @@ add_task(TaskAutoDock)
 
 add_task(TaskWaitForFace)
 add_task(TaskStareAtFace)
-#add_task(TaskGoToPose)
+add_task(TaskGoToPose)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -157,6 +157,7 @@ install(
 install(PROGRAMS  
 	missions/graph_forever.py
 	missions/test_goto.py
+	missions/test_gotopose.py
 	missions/test_graph_2d.py
 	missions/test_graph.py
 	missions/test_graph-test.py
