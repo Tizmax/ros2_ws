@@ -97,13 +97,30 @@ class RoverKinematics:
         # TODO: Build pseudo inverse of W using the notation from the class. The matrix size below is wrong.
         #W = [[cos(drive_cfg[k].x), -sin(drive_cfg[k].x), drive_cfg[k].y] for k in prefix]
         #iW = pinv(np.asmatrix(W))
-        iW = np.asmatrix(np.zeros((3,2)))
-        return iW
+        W = np.asmatrix(np.zeros((len(prefix)*2,3)))
+        for i in range(len(prefix)):
+            k = prefix[i]
+            # prepare the least-square matrices
+            W[2*i+0,0] = 1; W[2*i+0,1] = 0; W[2*i+0,2] = -drive_cfg[k].y; 
+            W[2*i+1,0] = 0; W[2*i+1,1] = 1; W[2*i+1,2] = +drive_cfg[k].x; 
+        return pinv(W)
 
     def prepare_displacement_matrix(self, motor_state_t1, motor_state_t2, drive_cfg):
         # then compute odometry using least square
         # TODO: Build S using the notation from the class. The matrix size below is wrong.
-        S = np.asmatrix(np.zeros((2,1)))
+        S = np.asmatrix(np.zeros((len(prefix)*2,1)))
+        for i in range(len(prefix)):
+            k = prefix[i]
+            # compute differentials
+            beta = (motor_state_t1.steering[k]+motor_state_t2.steering[k])/2
+            ds = (motor_state_t2.drive[k] - motor_state_t1.drive[k]) % (2*pi)
+            if ds>pi:
+                ds -= 2*pi
+            if ds<-pi:
+                ds += 2*pi
+            ds *= drive_cfg[k].radius
+            S[2*i+0,0] = ds*cos(beta)
+            S[2*i+1,0] = ds*sin(beta)
         return S
 
     def compute_displacement(self, motor_state, drive_cfg):

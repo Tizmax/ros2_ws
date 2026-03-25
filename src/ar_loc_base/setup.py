@@ -23,8 +23,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ar_loc_node = ar_loc.rover_loc:main',
-            'ar_tbloc_node = ar_loc.tb_loc:main',
+            'ar_loc_node = ar_loc_base.rover_loc:main',
+            'ar_tbloc_node = ar_loc_base.tb_loc:main',
         ],
     },
 )

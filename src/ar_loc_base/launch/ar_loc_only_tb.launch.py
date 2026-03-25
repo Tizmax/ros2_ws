@@ -51,7 +51,7 @@ def generate_launch_description():
             default_value='true',
             description='Use simulation (Gazebo, Bag) clock if true'),
         launch_ros.actions.Node(
-            package='ar_loc', executable='ar_tbloc_node', name='ar_loc_base',
+            package='ar_loc_base', executable='ar_tbloc_node', name='ar_loc_base',
             parameters=[
                 {'~/filter_name': 'particle'}, # in ['odo','kalman','particle']
                 {'~/use_ar': True},

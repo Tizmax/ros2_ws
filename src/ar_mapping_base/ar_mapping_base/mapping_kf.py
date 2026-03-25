@@ -28,14 +28,42 @@ class Landmark:
         # TODO
         # L = g(X,Z)
         # Cov(L) = dG/dX Cov(X) dG/dX^T + dG/dZ Cov(Z) dG/dZ^T
-        self.L =vstack([0,0])
-        self.P =mat([[0,0],[0,0]])
+
+        Rtheta = self.getRotation(X[2,0])
+        
+
+        self.L = X[0:2,0] + Rtheta @ Z
+        self.P = Rtheta @ R @ Rtheta.T
 
     def update(self,Z, X, R):
         # Update the landmark based on measurement Z, 
         # current position X and uncertainty R
         # TODO
+        
+        theta = X[2,0]
+        R_inv = self.getRotation(-theta)
+        
+        Z_pred = R_inv @ (self.L - X[0:2,0])
+
+        Innov = Z - Z_pred
+        
+        # H = dZ/dL
+        H = R_inv
+
+        K = self.P @ H.T @ inv(H @ self.P @ H.T + R)
+
+        # Update
+        self.L = self.L + K @ Innov
+        self.P = (eye(2) - K @ H) @ self.P
+
         return
+
+    
+    def getRotation(self, theta):
+        R = mat(zeros((2,2)))
+        R[0,0] = cos(theta); R[0,1] = -sin(theta)
+        R[1,0] = sin(theta); R[1,1] = cos(theta)
+        return R
         
 
 
@@ -48,16 +76,19 @@ class MappingKF:
     def update_ar(self, logger, Z, X, Id, uncertainty):
         self.lock.acquire()
         # TODO
+        X = mat(X)
+        Z = mat(Z)
         logger.info("Update: Z="+str(Z.T)+" X="+str(X.T)+" Id="+str(Id))
         R = mat(diag([uncertainty,uncertainty]))
         if Id in self.marker_list:
             # Known landmark, we can run the KF update
             # TODO
-            self.marker_list[Id] += 0
+            self.marker_list[Id].update(Z, X, R)
+            # self.marker_list[Id] += 0
         else:
             # New landmark, we need to create it
             # TODO
-            self.marker_list[Id] = 0
+            self.marker_list[Id] = Landmark(Z, X, R)
             logger.info("Initialised landmark %d at %s" %
                     (Id,str(self.marker_list[Id].L.T)))
         self.lock.release()

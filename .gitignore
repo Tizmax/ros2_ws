@@ -2,9 +2,13 @@
 build/
 install/
 log/
+data/
 
 # rendus
 *.zip
+
+#trucs bizarres
+*.pcd
 
 # Python
 __pycache__/

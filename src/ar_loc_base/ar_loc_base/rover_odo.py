@@ -148,7 +148,7 @@ class DeltaOdo:
 
 class RoverOdo(DeltaOdo):
     def __init__(self, node, initial_pose, initial_uncertainty):
-        super().__init__(self,node,initial_pose,initial_uncertainty)
+        super().__init__(node,initial_pose,initial_uncertainty)
         self.kinematics=RoverKinematics()
 
     def predict(self, logger, motor_state, drive_cfg, encoder_precision):
@@ -165,7 +165,7 @@ class RoverOdo(DeltaOdo):
         self.motor_state.copy(motor_state)
 
         # Estimate DeltaX using the pseudo-inverse method
-        DeltaX = iW*S
+        DeltaX = iW @ S
         
         self.predict_delta(logger,DeltaX,encoder_precision,False)
         self.lock.release()

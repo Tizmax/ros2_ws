@@ -62,8 +62,8 @@ def generate_launch_description():
             package='vrep_ros_teleop', executable='teleop_node', name='teleop',
             parameters=[
                 {'~/axis_linear_x': 1},
-                {'~/axis_linear_y': 0}, #3 for skidsteer else 0
-                {'~/axis_angular': 3}, #0 for skidsteer else 3
+                {'~/axis_linear_y': 3}, #3 for skidsteer else 0
+                {'~/axis_angular': 0}, #0 for skidsteer else 3
                 {'~/scale_linear_x': 1.0},
                 {'~/scale_linear_y': 1.0},
                 {'~/scale_angular': 1.},

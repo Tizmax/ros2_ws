@@ -12,6 +12,7 @@ import threading
 from rover_driver_base.rover_kinematics import RoverKinematics
 from ar_loc_base.rover_odo import RoverOdo, DeltaOdo
 import numpy as np
+from copy import deepcopy
 
 class DeltaPF(DeltaOdo):
     def __init__(self, node, initial_pose, initial_uncertainty):
@@ -19,7 +20,7 @@ class DeltaPF(DeltaOdo):
         self.N = 500
         self.particles = [self.X + self.drawNoise(initial_uncertainty) for i in range(0,self.N)]
         self.pa_pub = node.create_publisher(PoseArray,"~/particles",1)
-        # print self.particles
+        # print(self.particles)
 
     def getRotationFromWorldToRobot(self):
         return self.getRotation(-self.X[2,0])
@@ -33,31 +34,71 @@ class DeltaPF(DeltaOdo):
     def applyDisplacement(self,X,DeltaX,Uncertainty):
         # TODO: apply the displacement DeltaX, in the robot frame, to the particle X expressed in the world frame,
         # including the uncertainty present in variable uncertainty
-        return X 
+        theta = X[2,0]
+        Rtheta = mat([[cos(theta), -sin(theta), 0], 
+                      [sin(theta),  cos(theta), 0],
+                      [         0,           0, 1]])
+
+        X = X + Rtheta @ DeltaX + self.drawNoise(Uncertainty)
+        X[2,0] = self.normAngle(X[2,0])
+        return X
 
 
     def predict_delta(self, logger, DeltaX, Uncertainty, lock=True):
         if lock:
             self.lock.acquire()
-        noise=np.diag(Uncertainty).reshape((3,1))
+        if type(Uncertainty) == numpy.ndarray:
+            if len(Uncertainty.shape)>1:
+                noise=np.diag(Uncertainty).reshape((3,1))
+            else:
+                noise=Uncertainty.reshape((3,1))
+        else:
+            noise=np.array([[Uncertainty,Uncertainty,Uncertainty]]).T
+
+        # print(self.particles)
+        # print("="*1500)
         # Apply the particle filter prediction step here
         # TODO
 
+        # print("-"*500)
+        # print("noise: %s" % (str(noise.T)))
+        # print("uncertainty: %s" % (str(Uncertainty)))
+
+        new_particles = []
+        for p in self.particles:
+            new_p = self.applyDisplacement(deepcopy(p),DeltaX,noise)
+            new_particles.append(deepcopy(new_p))
+
+        # print(self.particles)
+
         # DeltaX = iW*S
         # Note, using the function applyDisplacement could be useful to compute the new particles
-        # self.particles = ...
+        self.particles = new_particles
         self.updateMean(logger)
         if lock:
             self.lock.release()
 
     def evalParticleAR(self,X, Z, L, Uncertainty):
         # Returns the fitness of a particle with state X given observation Z of landmark L
-        return 0
+        dx = L[0,0] - X[0,0]
+        dy = L[1,0] - X[1,0]
+
+        R = self.getRotation(-X[2,0])
+        Zp = R @ mat([[dx],[dy]])
+
+        #error between predicted and actual Z
+        error = np.linalg.norm(Z - Zp)
+
+        weight = exp(-0.5*error**2/Uncertainty)
+        return weight
 
     def evalParticleCompass(self,X, Value, Uncertainty):
         # Returns the fitness of a particle with state X given compass observation value
         # Beware of the module when computing the difference of angles
-        return 0
+        
+        error = self.normAngle(Value - X[2,0])
+        weight = exp(-0.5*error**2/Uncertainty)
+        return weight
 
     def update_ar(self, logger, Z, L, Uncertainty):
         self.lock.acquire()
@@ -66,8 +107,25 @@ class DeltaPF(DeltaOdo):
         # Implement particle filter update using landmarks here. Using the function evalParticleAR could be useful
 
         # TODO
+        weights = []
 
-        # self.particles = ...
+        for p in self.particles:
+            w = self.evalParticleAR(p,Z,L,Uncertainty)
+            weights.append(w)
+
+        if sum(weights)>0:
+            weights = weights/sum(weights)
+        else:
+            weights = [1.0 / self.N for i in range(self.N)]
+
+        # resample particles according to weights
+        new_particles = []
+
+        for i in range(0,self.N):
+            idx = np.random.choice(range(0,self.N), p = weights)
+            new_particles.append(deepcopy(self.particles[idx]))
+
+        self.particles = new_particles
         
         self.updateMean(logger)
         self.lock.release()
@@ -80,8 +138,24 @@ class DeltaPF(DeltaOdo):
         # Implement particle filter update using landmarks here. Using the function evalParticleCompass could be useful
 
         # TODO
+        weights = []
 
-        # self.particles = ...
+        for p in self.particles:
+            w = self.evalParticleCompass(p,angle,Uncertainty)
+            weights.append(w)
+
+        if sum(weights)>0:
+            weights = weights/sum(weights)
+        else:
+            weights = [1.0 / self.N for i in range(0,self.N)]
+
+        # resample particles according to weights
+        new_particles = []
+
+        for i in range(0,self.N):
+            idx = np.random.choice(range(0,self.N), p = weights)
+            new_particles.append(deepcopy(self.particles[idx]))
+        self.particles = new_particles
         
         self.updateMean(logger)
         self.lock.release()
