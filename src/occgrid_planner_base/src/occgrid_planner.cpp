@@ -94,10 +94,27 @@ class OccupancyGridPlanner : public rclcpp::Node {
             }
             // TODO: Implement obstacle expansion here
             // -----------------------
+
+            // STEP 1
+            // convert robot radius to pixels
+            int robot_radius_px = std::max(1, (int)(robot_radius_ / info_.resolution));
+            
+            // create a circular element to represent the robot's footprint
+            cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2 * robot_radius_px + 1, 2 * robot_radius_px + 1));
+
+
+            cv::Mat temp_og; // temporary
+            cv::bitwise_not(og_, temp_og); //invert grid values because dilate expand high values
+
+            cv::dilate(temp_og, temp_og, element);
+
+            cv::bitwise_not(temp_og, og_); //invert back
+
             if (!ready_) {
                 ready_ = true;
                 RCLCPP_INFO(this->get_logger(),"Received occupancy grid, ready_ to plan");
             }
+
             // The lines below are only for display
             unsigned int w = maxx - minx;
             unsigned int h = maxy - miny;
@@ -198,7 +215,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
                 return;
             }
             // Only accept target which are FREE in the grid (HW, Step 5).
-            if (og_(target) != FREE) {
+            if (og_(target) == OCCUPIED) {
                 RCLCPP_ERROR(this->get_logger(),"Invalid target point: occupancy = %d",og_(target));
                 return;
             }
@@ -269,6 +286,8 @@ class OccupancyGridPlanner : public rclcpp::Node {
             // The core of Dijkstra's Algorithm, a sorted heap, where the first
             // element is always the closer to the start.
             // TODO: from Dijkstra to A*, add a heuristic and an early exit
+
+            // Step 2
             Heap heap;
             heap.insert(Heap::value_type(0, start));
             cell_value(start.x,start.y) = 0;
@@ -277,6 +296,12 @@ class OccupancyGridPlanner : public rclcpp::Node {
                 Heap::iterator hit = heap.begin();
                 // the cell it contains is this_cell
                 cv::Point this_cell = hit->second;
+
+                // break if the target is already reached
+                if (this_cell == target) {
+                    break;
+                }
+
                 // and its score is this_cost
                 float this_cost = cell_value(this_cell.x,this_cell.y);
                 // We can remove it from the heap now.
@@ -301,7 +326,14 @@ class OccupancyGridPlanner : public rclcpp::Node {
                         predecessor.at<cv::Vec2s>(dest.x,dest.y) = cv::Vec2s(this_cell.x,this_cell.y);
                         cell_value(dest.x,dest.y) = new_cost;
                         // And insert the selected cells in the map.
-                        heap.insert(Heap::value_type(new_cost,dest));
+
+                        //dijkstra
+                        //heap.insert(Heap::value_type(new_cost,dest));
+
+                        //A*
+                        float h = std::hypot(dest.x - target.x, dest.y - target.y); //heuristic
+                        float priority = new_cost + h;
+                        heap.insert(Heap::value_type(priority, dest));
                     }
                 }
             }

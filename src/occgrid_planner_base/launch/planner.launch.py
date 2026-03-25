@@ -61,9 +61,9 @@ def generate_launch_description():
         launch_ros.actions.Node(
             package='vrep_ros_teleop', executable='teleop_node', name='teleop',
             parameters=[
-                {'~/axis_linear_x': 4},
-                {'~/axis_angular': 3},
-                {'~/scale_linear_x': 0.2},
+                {'~/axis_linear_x': 1},
+                {'~/axis_angular': 0},
+                {'~/scale_linear_x': 1.},
                 {'~/scale_angular': 1.},
                 {'~/timeout': 1.0}
                 ],
