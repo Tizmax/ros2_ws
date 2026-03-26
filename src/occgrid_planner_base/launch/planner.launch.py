@@ -104,7 +104,7 @@ def generate_launch_description():
             parameters=[
                 {'~/max_acceleration': 0.3},
                 {'~/max_braking': 0.1},
-                {'~/velocity': 0.1},
+                {'~/velocity': 0.5},
                 ],
             remappings=[
                 ('~/path', '/occgrid_planner/path'),
@@ -118,7 +118,7 @@ def generate_launch_description():
                 {'~/Ky': 0.0},
                 {'~/Ktheta': 1.0},
                 {'~/max_rot_speed': 1.0},
-                {'~/max_velocity': 0.1},
+                {'~/max_velocity': 0.5},
                 {'~/max_y_error': 1.0},
                 {'~/max_error': 0.5},
                 {'~/look_ahead': 1.0},

@@ -5,6 +5,9 @@
 #include <list>
 #include <chrono>
 #include <functional>
+#include <cmath>
+#include <utility>
+#include <algorithm>
 
 
 #include <rclcpp/rclcpp.hpp>
@@ -50,10 +53,23 @@ class OccupancyGridPlanner : public rclcpp::Node {
         bool debug_;
         double robot_radius_;
 
-        typedef std::multimap<float, cv::Point> Heap;
+        typedef std::multimap<float, cv::Point3i> Heap;
 
         // Example of code to convert between Point3i and Point2i, aka Point
         cv::Point P2(const cv::Point3i & P) {return cv::Point(P.x,P.y);}
+
+        unsigned int angle_to_index(double yaw) {
+            // Normalize to 0..2PI
+            double angle = fmod(yaw, 2 * M_PI);
+            if (angle < 0) angle += 2 * M_PI;
+            // The sector 0 should be centered on 0.
+            unsigned int idx = (unsigned int)(round(angle * 8.0 / (2.0 * M_PI))) % 8;
+            return idx;
+        }
+
+        double index_to_angle(unsigned int idx) {
+            return idx * 2.0 * M_PI / 8.0;
+        }
 
         // Callback for Occupancy Grids
         void og_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg) {
@@ -200,46 +216,50 @@ class OccupancyGridPlanner : public rclcpp::Node {
             // grid center.
             // For reference, this recovers the robot orientation
             double t_yaw = tf2::getYaw(pose.pose.orientation);
-            cv::Point target = cv::Point(pose.pose.position.x / info_.resolution, 
+            cv::Point2i target_2d = cv::Point2i(pose.pose.position.x / info_.resolution, 
                     pose.pose.position.y / info_.resolution)
                 + og_center_;
-            RCLCPP_INFO(this->get_logger(),"Planning target: %.2f %.2f %.2f-> %d %d",
-                    pose.pose.position.x, pose.pose.position.y, t_yaw, target.x, target.y);
-            cv::circle(og_rgb_marked_,target, 10, cv::Scalar(0,0,255));
+            cv::Point3i target = cv::Point3i(target_2d.x, target_2d.y, angle_to_index(t_yaw));
+            
+            RCLCPP_INFO(this->get_logger(),"Planning target: %.2f %.2f %.2f-> %d %d %d",
+                    pose.pose.position.x, pose.pose.position.y, t_yaw, target.x, target.y, target.z);
+            cv::circle(og_rgb_marked_,target_2d, 10, cv::Scalar(0,0,255));
             if (!headless_) {
                 cv::imshow( "OccGrid", og_rgb_marked_ );
             }
-            if (!isInGrid(target)) {
+            if (!isInGrid(target_2d)) {
                 RCLCPP_ERROR(this->get_logger(),"Invalid target point (%.2f %.2f) -> (%d %d)",
                         pose.pose.position.x, pose.pose.position.y, target.x, target.y);
                 return;
             }
             // Only accept target which are FREE in the grid (HW, Step 5).
-            if (og_(target) == OCCUPIED) {
-                RCLCPP_ERROR(this->get_logger(),"Invalid target point: occupancy = %d",og_(target));
+            if (og_(target_2d) != FREE) {
+                RCLCPP_ERROR(this->get_logger(),"Invalid target point: occupancy = %d",og_(target_2d));
                 return;
             }
 
             // Now get the current point in grid coordinates.
-            cv::Point start;
+            cv::Point2i start_2d;
             double s_yaw = 0;
             if (debug_) {
-                start = og_center_;
+                start_2d = og_center_;
             } else {
                 // For reference, this is how we get the current pose orientation
                 s_yaw = tf2::getYaw(transformStamped.transform.rotation);
-                start = cv::Point(transformStamped.transform.translation.x / info_.resolution, 
+                start_2d = cv::Point2i(transformStamped.transform.translation.x / info_.resolution, 
                         transformStamped.transform.translation.y / info_.resolution)
                     + og_center_;
             }
-            RCLCPP_INFO(this->get_logger(),"Planning origin %.2f %.2f %.2f -> %d %d",
+            cv::Point3i start = cv::Point3i(start_2d.x, start_2d.y, angle_to_index(s_yaw));
+
+            RCLCPP_INFO(this->get_logger(),"Planning origin %.2f %.2f %.2f -> %d %d %d",
                     transformStamped.transform.translation.x, transformStamped.transform.translation.y,
-                    s_yaw, start.x, start.y);
-            cv::circle(og_rgb_marked_,start, 10, cv::Scalar(0,255,0));
+                    s_yaw, start.x, start.y, start.z);
+            cv::circle(og_rgb_marked_,start_2d, 10, cv::Scalar(0,255,0));
             if (!headless_) {
                 cv::imshow( "OccGrid", og_rgb_marked_ );
             }
-            if (!isInGrid(start)) {
+            if (!isInGrid(start_2d)) {
                 RCLCPP_ERROR(this->get_logger(),"Invalid starting point (%.2f %.2f) -> (%d %d)",
                         transformStamped.transform.translation.x, transformStamped.transform.translation.y,
                         start.x, start.y);
@@ -247,8 +267,8 @@ class OccupancyGridPlanner : public rclcpp::Node {
             }
             // If the starting point is not FREE there is a bug somewhere, but
             // better to check
-            if (og_(start) != FREE) {
-                RCLCPP_ERROR(this->get_logger(),"Invalid start point: occupancy = %d",og_(start));
+            if (og_(start_2d) != FREE) {
+                RCLCPP_ERROR(this->get_logger(),"Invalid start point: occupancy = %d",og_(start_2d));
                 return;
             }
             RCLCPP_INFO(this->get_logger(),"Starting planning from (%d, %d) to (%d, %d)",start.x,start.y, target.x, target.y);
@@ -256,46 +276,26 @@ class OccupancyGridPlanner : public rclcpp::Node {
         }
             
 
-        void planToPixelTarget(cv::Point2i start, cv::Point2i target) {
+        void planToPixelTarget(cv::Point3i start, cv::Point3i target) {
 
             // Here the Dijskstra algorithm starts 
             // The best distance to the goal computed so far. This is
             // initialised with Not-A-Number. 
-            cv::Mat_<float> cell_value(og_.size(), NAN);
+            int dims[3] = {og_.size().width, og_.size().height, 8};
+            cv::Mat_<float> cell_value(3,dims, NAN);
             // For each cell we need to store a pointer to the coordinates of
             // its best predecessor. 
-            cv::Mat_<cv::Vec2s> predecessor(og_.size());
-            
-            // TODO: For reference, this is how we would make the arrays 3D
-            // int dims[3] = {og_.size().width, og_.size().height, 8};
-            // cv::Mat_<float> cell_value(3,dims, NAN);
-            // cv::Mat_<cv::Vec3s> predecessor(3,dims);
-
-            // The neighbour of a given cell in relative coordinates. The order
-            // is important. If we use 4-connexity, then we can use only the
-            // first 4 values of the array. If we use 8-connexity we use the
-            // full array.
-            std::array<cv::Point,8> neighbours = {cv::Point(1,0), cv::Point(0,1), cv::Point(-1,0), cv::Point(0, -1),
-                cv::Point(1,1), cv::Point(-1,1), cv::Point(-1,-1), cv::Point(1,-1)};
-            // TODO: Create a new set of neighbours in 3D
-            // std::array<cv::Point3i,1> neighbours = {cv::Point3i(0,0,0)}; 
-            // Cost of displacement corresponding the neighbours. Diagonal
-            // moves are 44% longer.
-            std::array<float,8> cost = {1, 1, 1, 1, sqrt(2), sqrt(2), sqrt(2), sqrt(2)};
-
-            // The core of Dijkstra's Algorithm, a sorted heap, where the first
-            // element is always the closer to the start.
-            // TODO: from Dijkstra to A*, add a heuristic and an early exit
+            cv::Mat_<cv::Vec3s> predecessor(3,dims);
 
             // Step 2
             Heap heap;
             heap.insert(Heap::value_type(0, start));
-            cell_value(start.x,start.y) = 0;
+            cell_value(start.x,start.y,start.z) = 0;
             while (!heap.empty()) {
                 // Select the cell at the top of the heap
                 Heap::iterator hit = heap.begin();
                 // the cell it contains is this_cell
-                cv::Point this_cell = hit->second;
+                cv::Point3i this_cell = hit->second;
 
                 // break if the target is already reached
                 if (this_cell == target) {
@@ -303,55 +303,89 @@ class OccupancyGridPlanner : public rclcpp::Node {
                 }
 
                 // and its score is this_cost
-                float this_cost = cell_value(this_cell.x,this_cell.y);
+                float this_cost = cell_value(this_cell.x,this_cell.y,this_cell.z);
                 // We can remove it from the heap now.
                 heap.erase(hit);
+                
+                // Define neighbors 
+                std::vector<std::pair<cv::Point3i, float>> moves;
+                
+                // 1. Move Forward
+                double theta = index_to_angle(this_cell.z);
+                
+                int dx = 0, dy = 0;
+                float move_cost = 1.0;
+                
+                // Map sector to dx, dy (Approximation)
+                switch(this_cell.z) {
+                    case 0: dx = 1; dy = 0; move_cost = 1.0; break;
+                    case 1: dx = 1; dy = 1; move_cost = sqrt(2); break;
+                    case 2: dx = 0; dy = 1; move_cost = 1.0; break;
+                    case 3: dx = -1; dy = 1; move_cost = sqrt(2); break;
+                    case 4: dx = -1; dy = 0; move_cost = 1.0; break;
+                    case 5: dx = -1; dy = -1; move_cost = sqrt(2); break;
+                    case 6: dx = 0; dy = -1; move_cost = 1.0; break;
+                    case 7: dx = 1; dy = -1; move_cost = sqrt(2); break;
+                }
+                
+                cv::Point3i forward_cell(this_cell.x + dx, this_cell.y + dy, this_cell.z);
+                moves.push_back({forward_cell, move_cost});
+
+                // 2. Turn Left (increase index)
+                int left_z = (this_cell.z + 1) % 8;
+                moves.push_back({cv::Point3i(this_cell.x, this_cell.y, left_z), 1.0}); // rotation cost
+
+                // 3. Turn Right (decrease index)
+                int right_z = (this_cell.z - 1 + 8) % 8;
+                moves.push_back({cv::Point3i(this_cell.x, this_cell.y, right_z), 1.0}); // rotation cost
+
+
                 // Now see where we can go from this_cell
-                for (size_t i=0;i<neighbours.size();i++) {
-                    cv::Point dest = this_cell + neighbours[i];
-                    if (!isInGrid(dest)) {
+                for (size_t i=0;i<moves.size();i++) {
+                    cv::Point3i dest = moves[i].first;
+                    float step_cost = moves[i].second;
+
+                    if (!isInGrid(P2(dest))) {
                         // outside the grid
                         continue;
                     }
-                    uint8_t og = og_(dest);
-                    if (og != FREE) {
+                    uint8_t og_val = og_(dest.y, dest.x); // Check 2D collision
+                    if (og_val != FREE) {
                         // occupied or unknown
                         continue;
                     }
-                    float cv = cell_value(dest.x,dest.y);
-                    float new_cost = this_cost + cost[i];
+                    
+                    float cv = cell_value(dest.x,dest.y,dest.z);
+                    float new_cost = this_cost + step_cost;
+                    
                     if (std::isnan(cv) || (new_cost < cv)) {
                         // found shortest path (or new path), updating the
                         // predecessor and the value of the cell
-                        predecessor.at<cv::Vec2s>(dest.x,dest.y) = cv::Vec2s(this_cell.x,this_cell.y);
-                        cell_value(dest.x,dest.y) = new_cost;
-                        // And insert the selected cells in the map.
-
-                        //dijkstra
-                        //heap.insert(Heap::value_type(new_cost,dest));
+                        predecessor.at<cv::Vec3s>(dest.x,dest.y,dest.z) = cv::Vec3s(this_cell.x,this_cell.y,this_cell.z);
+                        cell_value(dest.x,dest.y,dest.z) = new_cost;
 
                         //A*
-                        float h = std::hypot(dest.x - target.x, dest.y - target.y); //heuristic
+                        float h = std::hypot(dest.x - target.x, dest.y - target.y); //heuristic (Euclidean distance on (x,y))
                         float priority = new_cost + h;
                         heap.insert(Heap::value_type(priority, dest));
                     }
                 }
             }
-            if (isnan(cell_value(target.x,target.y))) {
+            if (isnan(cell_value(target.x,target.y,target.z))) {
                 // No path found
-                RCLCPP_ERROR(this->get_logger(),"No path found from (%d, %d) to (%d, %d)",
-                        start.x,start.y,target.x,target.y);
+                RCLCPP_ERROR(this->get_logger(),"No path found from (%d, %d, %d) to (%d, %d, %d)",
+                        start.x,start.y,start.z,target.x,target.y,target.z);
                 return;
             }
             RCLCPP_INFO(this->get_logger(),"Planning completed");
             // Now extract the path by starting from goal and going through the
             // predecessors until the starting point
-            std::list<cv::Point> lpath;
+            std::list<cv::Point3i> lpath;
             while (target != start) {
                 assert(lpath.size()<1000000);
                 lpath.push_front(target);
-                cv::Vec2s p = predecessor(target.x,target.y);
-                target.x = p[0]; target.y = p[1]; 
+                cv::Vec3s p = predecessor.at<cv::Vec3s>(target.x,target.y,target.z);
+                target.x = p[0]; target.y = p[1]; target.z = p[2];
             }
             lpath.push_front(start);
             // Finally create a ROS path message
@@ -359,17 +393,19 @@ class OccupancyGridPlanner : public rclcpp::Node {
             path.header.stamp = this->get_clock()->now();
             path.header.frame_id = frame_id_;
             path.poses.resize(lpath.size());
-            std::list<cv::Point>::const_iterator it = lpath.begin();
+            std::list<cv::Point3i>::const_iterator it = lpath.begin();
             unsigned int ipose = 0;
             while (it != lpath.end()) {
                 // time stamp is not updated because we're not creating a
                 // trajectory at this stage
                 path.poses[ipose].header = path.header;
-                cv::Point P = *it - og_center_;
-                path.poses[ipose].pose.position.x = (P.x) * info_.resolution;
-                path.poses[ipose].pose.position.y = (P.y) * info_.resolution;
+                cv::Point3i P = *it;
+                cv::Point P2d = cv::Point(P.x, P.y) - og_center_; // Center offset
+                path.poses[ipose].pose.position.x = (P2d.x) * info_.resolution;
+                path.poses[ipose].pose.position.y = (P2d.y) * info_.resolution;
+                
                 tf2::Quaternion Q;
-                Q.setRPY(0,0,0);
+                Q.setRPY(0,0, index_to_angle(P.z));
                 path.poses[ipose].pose.orientation = tf2::toMsg(Q);
                 ipose++;
                 it ++;
