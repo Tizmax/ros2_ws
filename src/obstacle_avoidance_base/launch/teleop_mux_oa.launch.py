@@ -61,8 +61,8 @@ def generate_launch_description():
         launch_ros.actions.Node(
             package='vrep_ros_teleop', executable='teleop_node', name='teleop',
             parameters=[
-                {'~/axis_linear_x': 4},
-                {'~/axis_angular': 3},
+                {'~/axis_linear_x': 1}, #4
+                {'~/axis_angular': 0}, #3
                 {'~/scale_linear_x': 0.2},
                 {'~/scale_angular': 1.},
                 {'~/timeout': 1.0}
@@ -89,7 +89,7 @@ def generate_launch_description():
             package='obstacle_avoidance_base', executable='obstacle_avoidance_base', name='obstacle_avoidance',
             parameters=[
                 {'~/base_frame': 'body'},
-                {'~/display': False},
+                {'~/display': True},
                 {"~/max_range": 5.0},
                 {"~/max_linear_velocity": 1.0},
                 {"~/max_angular_velocity": 1.0},
@@ -98,7 +98,7 @@ def generate_launch_description():
                 {"~/map_resolution": 0.05},
                 {"~/linear_velocity_resolution": 0.05},
                 {"~/angular_velocity_resolution": 0.05},
-                {"~/robot_radius": 0.1},
+                {"~/robot_radius": 0.3},
                 {"~/time_horizon": 2.0},
                 {"~/k_v": 10.0},
                 {"~/k_w": 1.0},

@@ -25,16 +25,23 @@ class PathFollower : public rclcpp::Node {
     protected:
         rclcpp::TimerBase::SharedPtr timer_;
         rclcpp::Subscription<cs7630_msgs::msg::Trajectory>::SharedPtr traj_sub_;
+        rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
         rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr twist_pub_;
         rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr pose2d_pub_;
+        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pub_;
         double look_ahead_;
         double Kx_,Ky_,Ktheta_;
         double max_rot_speed_;
         double max_velocity_;
         double max_y_error_;
         double max_error_;
+        double max_tracking_delay_;
+        double replan_period_;
         double period_;
         bool always_publish_;
+        double tracking_delay_;
+        int replan_counter_;
+        geometry_msgs::msg::PoseStamped goal_;
 
         std::shared_ptr<tf2_ros::TransformListener> tf_listener{nullptr};
         std::unique_ptr<tf2_ros::Buffer> tf_buffer;
@@ -54,6 +61,11 @@ class PathFollower : public rclcpp::Node {
                 traj_.insert(Trajectory::value_type(rclcpp::Time(msg->ts[i].header.stamp).seconds(), msg->ts[i]));
             }
             RCLCPP_INFO(this->get_logger(),"Trajectory received");
+        }
+
+        void goal_cb(geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+            goal_ = *msg;
+            RCLCPP_INFO(this->get_logger(),"Goal cached for replanning");
         }
 
         geometry_msgs::msg::Pose2D computeError(const rclcpp::Time & now, const cs7630_msgs::msg::TrajectoryElement & te) {
@@ -93,7 +105,9 @@ class PathFollower : public rclcpp::Node {
             this->declare_parameter("~/max_velocity",1.0);
             this->declare_parameter("~/max_y_error",1.0);
             this->declare_parameter("~/max_error",0.5);
+            this->declare_parameter("~/max_tracking_delay",3.0);
             this->declare_parameter("~/period",0.050);
+            this->declare_parameter("~/replan_period",100.0);
             this->declare_parameter("~/always_publish",true);
 
             base_frame_ = this->get_parameter("~/base_frame").as_string();
@@ -105,8 +119,12 @@ class PathFollower : public rclcpp::Node {
             max_velocity_ = this->get_parameter("~/max_velocity").as_double();
             max_y_error_ = this->get_parameter("~/max_y_error").as_double();
             max_error_ = this->get_parameter("~/max_error").as_double();
+            max_tracking_delay_ = this->get_parameter("~/max_tracking_delay").as_double();
             period_ = this->get_parameter("~/period").as_double();
+            replan_period_ = this->get_parameter("~/replan_period").as_double();
             always_publish_ = this->get_parameter("~/always_publish").as_bool();
+            tracking_delay_ = 0.0;
+            replan_counter_ = 0;
 
             tf_buffer = std::make_unique<tf2_ros::Buffer>(this->get_clock());
             tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
@@ -118,6 +136,11 @@ class PathFollower : public rclcpp::Node {
                     std::bind(&PathFollower::traj_cb,this,std::placeholders::_1));
             twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("~/twistCommand",1);
             pose2d_pub_ = this->create_publisher<geometry_msgs::msg::Pose2D>("~/error",1);
+
+
+                goal_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1,
+                    std::bind(&PathFollower::goal_cb,this,std::placeholders::_1));
+            goal_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1);
 
             timer_ = this->create_wall_timer( std::chrono::duration<double>(period_),
                     std::bind(&PathFollower::timer_cb, this));
@@ -133,15 +156,24 @@ class PathFollower : public rclcpp::Node {
             return x;
         }
 
+        void replan() {
+            geometry_msgs::msg::PoseStamped goal = goal_;
+            goal.header.stamp = this->get_clock()->now();
+            goal_pub_->publish(goal);
+            RCLCPP_INFO(this->get_logger(),"Replan requested by republishing current goal");
+        }
+
         void timer_cb() {
             if (traj_.size() > 0) {
                 bool final = false;
+                bool should_replan = false;
+
                 rclcpp::Time now = this->get_clock()->now();
                 // First find the reference point which corresponds best to
                 // the current time. 
                 // TODO: modify this part to react to tracking delays
                 // introduced by obstacle avoidance or switch to manual.
-                Trajectory::const_iterator it = traj_.lower_bound(now.seconds() + look_ahead_);
+                Trajectory::const_iterator it = traj_.lower_bound(now.seconds() - tracking_delay_ + look_ahead_);
                 if (it == traj_.end()) {
                     // let's keep the final position
                     it --;
@@ -168,12 +200,20 @@ class PathFollower : public rclcpp::Node {
                 // Compute the tracking error and 
                 geometry_msgs::msg::Pose2D error = computeError(now,it->second);
                 pose2d_pub_->publish(error);
-                if (hypot(error.x,error.y)>max_error_) {
+                if (hypot(error.x,error.y)>max_error_) {      
                     // TODO: Manage the fact that the error has good too far.
                     // We need to make the carrot stop by delaying the requested time by 
                     // one time period (period_).
                     // After some time, we should probably trigger a replanning
                     // add the time of while to the delay
+                    // Freeze/slow the carrot by accumulating effective delay.
+                    tracking_delay_ = std::min(tracking_delay_ + period_, max_tracking_delay_);
+                    if (tracking_delay_ >= max_tracking_delay_) {
+                        // should_replan = true;
+                    }
+                } else if (tracking_delay_ > 0.0) {
+                    // Recover gradually once tracking error is back under control.
+                    tracking_delay_ = std::max(0.0, tracking_delay_ - period_);
                 }
 
                 geometry_msgs::msg::Twist twist;
@@ -194,6 +234,15 @@ class PathFollower : public rclcpp::Node {
                     // printf("Twist: %.2f %.2f\n",twist.linear.x,twist.angular.z);
                 }
                 twist_pub_->publish(twist);
+                
+                if (!final) {
+                    replan_counter_++;
+                    if (replan_counter_ > replan_period_ || should_replan) {
+                        replan_counter_ = 0;
+                        replan();
+                    }
+                }
+
             } else if (always_publish_) {
                 // Publish zero velocity
 #if 0
@@ -203,6 +252,7 @@ class PathFollower : public rclcpp::Node {
                 twist_pub_->publish(twist);
 #endif
             }
+
         }
 };
 

@@ -167,7 +167,7 @@ class ObstacleAvoidance : public rclcpp::Node {
             // is saying. This means that rotation on the spot are always
             // possible
             cv::Point myself(grid_width_/2,grid_width_/2);
-            cv::circle(og_,myself, ceil(robot_radius_/map_resolution_ + 1), cv::Scalar(FREE), -1); // filled circle
+            cv::circle(og_,myself, 2, cv::Scalar(FREE), -1); // filled circle
             if (display_) {
                 cv::imshow( "OccGrid", og_ );
             }
@@ -205,10 +205,10 @@ class ObstacleAvoidance : public rclcpp::Node {
             double min_w = -max_angular_velocity_;
             double max_w = max_angular_velocity_;
             // TODO: First update min_v/max_v and min_w/max_w to compute the intersection of Vs and Vd.
-            min_v = std::max(min_v,min_v);
-            max_v = std::min(max_v,max_v);
-            min_w = std::max(min_w,min_w);
-            max_w = std::min(max_w,max_w);
+            min_v = std::max(min_v, current_velocity_.linear.x - max_linear_accel_ * time_horizon_);
+            max_v = std::min(max_v, current_velocity_.linear.x + max_linear_accel_ * time_horizon_);
+            min_w = std::max(min_w, current_velocity_.angular.z - max_angular_accel_ * time_horizon_);
+            max_w = std::min(max_w, current_velocity_.angular.z + max_angular_accel_ * time_horizon_);
 
             // From that, we know which velocities we need to consider and we
             // creat a small matrix to help visualising Va (Vr)
@@ -227,12 +227,28 @@ class ObstacleAvoidance : public rclcpp::Node {
                 double v = min_v + j*linear_velocity_resolution_;
                 for (unsigned int i=0;i<n_w;i++) {
                     double w = min_w + i*angular_velocity_resolution_;
-                    Va(j,i) = UNKNOWN;
-                    scores(j,i) = v+w;// Stupid value to avoid the "unused variable" warning
+                    
+                    double d = v * time_horizon_;
+                    double alpha = atan2(v,w);
+
+                    Va(j,i) = occupancy_dalpha(d, alpha);
+                    if (Va(j,i) != FREE) {
+                        scores(j,i) = 0;
+                    } else {
+                        scores(j,i) = 255 * exp( - k_v_ * pow((v - desired.linear.x),2) - k_w_ * pow((w - desired.angular.z),2));
+                    }
+
+                    if (scores(j,i) > best_score) {
+                        best_score = scores(j,i);
+                        best_v = v;
+                        best_w = w;
+                    }
+
                 }
             }
-            RCLCPP_INFO(this->get_logger(),"Best score %f for (%f,%f)",
-                    best_score,best_v,best_w);
+            // RCLCPP_INFO(this->get_logger(),"Best score %f for (%f,%f)",
+                    // best_score,best_v,best_w);
+
             if (display_) {
                 cv::resize(scores,scores,cv::Size(200,200));
                 cv::imshow("Va",Va);
