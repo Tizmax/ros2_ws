@@ -42,7 +42,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
         std::unique_ptr<tf2_ros::Buffer> tf_buffer;
 
         cv::Rect roi_;
-        cv::Mat_<uint8_t> og_, cropped_og_;
+        cv::Mat_<uint8_t> og_, cropped_og_,og_without_unknown; 
         cv::Mat_<cv::Vec3b> og_rgb_, og_rgb_marked_;
         cv::Point og_center_;
         nav_msgs::msg::MapMetaData info_;
@@ -77,6 +77,8 @@ class OccupancyGridPlanner : public rclcpp::Node {
             frame_id_ = msg->header.frame_id;
             // Create an image to store the value of the grid.
             og_ = cv::Mat_<uint8_t>(msg->info.height, msg->info.width,0xFF);
+
+            og_without_unknown = cv::Mat_<uint8_t>(msg->info.height, msg->info.width,0xFF);
             og_center_ = cv::Point(-info_.origin.position.x/info_.resolution,
                     -info_.origin.position.y/info_.resolution);
 
@@ -90,13 +92,16 @@ class OccupancyGridPlanner : public rclcpp::Node {
                     switch (v) {
                         case 0: 
                             og_(j,i) = FREE; 
+                            og_without_unknown(j,i) = FREE;
                             break;
                         case 100: 
                             og_(j,i) = OCCUPIED; 
+                            og_without_unknown(j,i) = OCCUPIED;
                             break;
                         case -1: 
                         default:
                             og_(j,i) = UNKNOWN; 
+                            og_without_unknown(j,i) = FREE;
                             break;
                     }
                     // Update the bounding box of free or occupied cells.
@@ -120,9 +125,18 @@ class OccupancyGridPlanner : public rclcpp::Node {
 
 
             cv::Mat temp_og; // temporary
+            cv::Mat temp_og_without_unknown; // temporary
             cv::bitwise_not(og_, temp_og); //invert grid values because dilate expand high values
+            cv::bitwise_not(og_without_unknown, temp_og_without_unknown); 
 
-            cv::dilate(temp_og, temp_og, element);
+
+            
+            cv::dilate(temp_og_without_unknown, temp_og_without_unknown, element);
+
+            
+
+            cv::bitwise_or(temp_og_without_unknown,temp_og, temp_og);
+            
 
             cv::bitwise_not(temp_og, og_); //invert back
 
