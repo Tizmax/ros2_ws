@@ -15,6 +15,7 @@ find_package(cs7630_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
@@ -33,12 +34,24 @@ target_link_libraries(occgrid_planner_base PUBLIC
     ${nav_msgs_TARGETS}
     ${sensor_msgs_TARGETS}
     ${std_msgs_TARGETS}
+    ${std_srvs_TARGETS}
     rclcpp::rclcpp
     sensor_msgs::sensor_msgs_library
     tf2_geometry_msgs::tf2_geometry_msgs
     tf2_ros::static_transform_broadcaster_node
     tf2_ros::tf2_ros
     ${OpenCV_LIBRARIES}
+)
+
+add_executable(explorer_base src/explorer.cpp)
+target_include_directories(explorer_base PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(explorer_base PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+target_link_libraries(explorer_base PUBLIC
+    ${geometry_msgs_TARGETS}
+    rclcpp::rclcpp
+    tf2_geometry_msgs::tf2_geometry_msgs
 )
 
 add_executable(path_optimizer_base src/path_optimizer.cpp)
@@ -77,7 +90,7 @@ target_link_libraries(path_follower_base PUBLIC
     tf2_ros::tf2_ros
 )
 
-install(TARGETS occgrid_planner_base path_optimizer_base path_follower_base
+install(TARGETS occgrid_planner_base explorer_base path_optimizer_base path_follower_base
   DESTINATION lib/${PROJECT_NAME})
 
 install(

@@ -21,6 +21,7 @@
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav_msgs/msg/path.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 
 #define FREE 0xFF
 #define UNKNOWN 0x80
@@ -35,7 +36,13 @@ class OccupancyGridPlanner : public rclcpp::Node {
         rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr og_sub_;
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_sub_;
         rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr optimal_target_pub_;
+        rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr explorer_service_;
         rclcpp::TimerBase::SharedPtr timer_;
+        rclcpp::TimerBase::SharedPtr timer_exploration_;
+
+        // Runtime behavior control
+        bool do_explore_{false}; 
 
 
         std::shared_ptr<tf2_ros::TransformListener> tf_listener{nullptr};
@@ -43,6 +50,8 @@ class OccupancyGridPlanner : public rclcpp::Node {
 
         cv::Rect roi_;
         cv::Mat_<uint8_t> og_, cropped_og_,og_without_unknown; 
+        cv::Mat_<bool> frontier_points;
+        std::vector<cv::Point2i> frontier_points_vector;
         cv::Mat_<cv::Vec3b> og_rgb_, og_rgb_marked_;
         cv::Point og_center_;
         nav_msgs::msg::MapMetaData info_;
@@ -172,6 +181,111 @@ class OccupancyGridPlanner : public rclcpp::Node {
                     cv::imshow( "OccGrid", og_rgb_ );
                 }
             }
+
+
+            create_frontier_points(og_, msg->info.height, msg->info.width);
+
+        }
+        
+        void exploration_step() {
+            if (do_explore_) {
+                try {
+                    geometry_msgs::msg::TransformStamped transformStamped;
+                    transformStamped = tf_buffer->lookupTransform(frame_id_, base_link_, tf2::TimePointZero);
+                
+                    double s_yaw = tf2::getYaw(transformStamped.transform.rotation);
+                    cv::Point2i start_2d = cv::Point2i(transformStamped.transform.translation.x / info_.resolution, 
+                            transformStamped.transform.translation.y / info_.resolution) + og_center_;
+                    cv::Point3i start = cv::Point3i(start_2d.x, start_2d.y, angle_to_index(s_yaw));
+                    
+                    cv::Point2i optimal_target_2d = selectOptimalPoint(start);
+                    cv::Point3i optimal_target = cv::Point3i(optimal_target_2d.x, optimal_target_2d.y, angle_to_index(0));
+                    
+                    planToPixelTarget(start, optimal_target);
+                
+                } catch (const tf2::TransformException & ex) {
+                    RCLCPP_DEBUG(this->get_logger(), "Cannot get robot position: %s", ex.what());
+                }
+            }
+        }
+
+        void create_frontier_points(cv::Mat_<uint8_t> og_, int height, int width) {
+            
+            frontier_points = cv::Mat_<bool>(height, width, false);
+
+            for (unsigned int j=0;j<height;j++) {
+                for (unsigned int i=0;i<width;i++) {
+                    if (og_(j,i) == FREE) {
+                        if (og_(j-1,i) == UNKNOWN || og_(j+1,i) == UNKNOWN || og_(j,i-1) == UNKNOWN || og_(j,i+1) == UNKNOWN) {
+                            frontier_points(j,i) = true;
+                            frontier_points_vector.emplace_back(j, i);
+                        }
+                    }
+                }
+            }
+
+            cv::imshow( "frontier", frontier_points *255);
+        }
+
+
+
+        float computeDistanceCost(const cv::Point& a, const cv::Point& b) {
+            return std::hypot(a.x - b.x, a.y - b.y);
+        }
+
+
+        int computeInformationGain(const cv::Point& p, int r = 5) {
+            int gain = 0;
+
+            for (int dy = -r; dy <= r; dy++) {
+                for (int dx = -r; dx <= r; dx++) {
+
+                    cv::Point neighbor = p + cv::Point(dx, dy);
+
+                    if (!isInGrid(neighbor)) {
+                        continue;
+                    }
+
+                    if (og_(neighbor.y, neighbor.x) == UNKNOWN) {
+                        gain++;
+                    }
+                }
+            }
+            return gain;
+        }
+
+        cv::Point2i selectOptimalPoint(const cv::Point3i& robot_position) {
+
+            if (frontier_points_vector.empty()) {
+                return cv::Point2i(robot_position.x, robot_position.y); // there is no optimal point in this case
+            }
+
+            cv::Point2i best_point = frontier_points_vector[0];
+            float best_score = std::hypot(best_point.x - robot_position.x, best_point.y - robot_position.y);
+
+            for (const cv::Point2i& p : frontier_points_vector) {
+
+                // the optimal point that will be visited should be free
+                if (og_(p.y, p.x) != FREE) {
+                    continue;
+                }
+
+                float dist = std::hypot(p.x - robot_position.x, p.y - robot_position.y);
+                int gain = computeInformationGain(p);
+
+                // weights 
+                float distance_weight = 1.0; 
+                float gain_weight  = 2.0;
+
+                float score = distance_weight * dist - gain_weight * gain;
+
+                if (score < best_score) {
+                    best_score = score;
+                    best_point = p;
+                }
+            }
+
+            return best_point;
         }
 
         // Generic test if a point is within the occupancy grid
@@ -286,6 +400,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
                 return;
             }
             RCLCPP_INFO(this->get_logger(),"Starting planning from (%d, %d) to (%d, %d)",start.x,start.y, target.x, target.y);
+
             planToPixelTarget(start, target);
         }
             
@@ -448,16 +563,40 @@ class OccupancyGridPlanner : public rclcpp::Node {
             target_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("~/goal",1,
                     std::bind(&OccupancyGridPlanner::target_callback,this,std::placeholders::_1));
             path_pub_ = this->create_publisher<nav_msgs::msg::Path>("~/path",1);
+            optimal_target_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("~/optimal_target",1);
+            
+            explorer_service_ = this->create_service<std_srvs::srv::SetBool>(
+                    "~/enable_explorer",
+                    std::bind(&OccupancyGridPlanner::explorer_callback, 
+                              this, std::placeholders::_1, std::placeholders::_2));
 
             if (!headless_) {
                 cv::namedWindow( "OccGrid", cv::WINDOW_AUTOSIZE );
                 timer_ = this->create_wall_timer( 50ms,
                         std::bind(&OccupancyGridPlanner::timer_cb, this));
             }
+
+            // Timer to publish goal_pose every 10 seconds
+            timer_exploration_ = this->create_wall_timer(
+                    10s,
+                    std::bind(&OccupancyGridPlanner::timer_exploration_callback, this));
         }
 
         void timer_cb() {
             cv::waitKey(5);
+        }
+
+        void timer_exploration_callback() {
+            exploration_step();
+        }
+
+        void explorer_callback(
+                const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+            do_explore_ = request->data;
+            response->success = true;
+            response->message = do_explore_ ? "Exploration enabled" : "Exploration disabled";
+            RCLCPP_INFO(this->get_logger(), "%s", response->message.c_str());
         }
 };
 

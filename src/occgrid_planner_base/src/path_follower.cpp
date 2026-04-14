@@ -138,8 +138,8 @@ class PathFollower : public rclcpp::Node {
             pose2d_pub_ = this->create_publisher<geometry_msgs::msg::Pose2D>("~/error",1);
 
 
-                goal_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1,
-                    std::bind(&PathFollower::goal_cb,this,std::placeholders::_1));
+            goal_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1,
+                std::bind(&PathFollower::goal_cb,this,std::placeholders::_1));
             goal_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1);
 
             timer_ = this->create_wall_timer( std::chrono::duration<double>(period_),
