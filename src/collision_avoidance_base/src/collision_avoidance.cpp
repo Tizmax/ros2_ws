@@ -70,8 +70,9 @@ class CollisionAvoidance : public rclcpp::Node {
             // variables 'only_forward', 'safety_diameter', 'ignore_diameter',
             // 'max_velocity'.
             unsigned int n = lastpc.size();
+            float min_distance = 100.0;
             for (unsigned int i=0;i<n;i++) {
-                float x = lastpc[i].x;
+                float x = -lastpc[i].x; // -x bc the lidar is mounted backwards on the turtlebot osdfjoqisfjqpisj
                 float y = lastpc[i].y;
 
                 if (hypot(x,y) < 1e-2) {
@@ -79,13 +80,20 @@ class CollisionAvoidance : public rclcpp::Node {
                     continue;
                 }
 
-                if (x * res.linear.x <= 0) {
+                if (x * res.linear.x < 0) {
                     continue;
                 }
 
                 if (abs(y) > safety_diameter) { continue;} 
 
                 if (x > 0) {
+                    if (x < 0.1) {
+                        continue;
+                    } 
+                    if (x < min_distance) {
+                        min_distance = x;
+                    }
+                    
                     if (x < safety_diameter) {
                         res.linear.x = 0.0;
                     } else if (x < ignore_diameter) {
@@ -111,7 +119,8 @@ class CollisionAvoidance : public rclcpp::Node {
 
                 // RCLCPP_INFO(this->get_logger(),"%d %.3f %.3f",i,x,y);
             }
-            RCLCPP_INFO(this->get_logger(),"Speed limiter: desired %.2f controlled %.2f",desired.linear.x,res.linear.x);
+
+            RCLCPP_INFO(this->get_logger(),"Speed limiter: desired %.2f controlled %.2f; min_distances: %.2f",desired.linear.x,res.linear.x,min_distance);
             return res;
         }
 

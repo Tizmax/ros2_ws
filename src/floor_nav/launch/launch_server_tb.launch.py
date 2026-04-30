@@ -138,7 +138,8 @@ def generate_launch_description():
             remappings=[
                 # ('~/clouds3d', '/points'),
                 ('~/scans', '/scan'),
-                ('/mux/autoCommand', '/mux/autoCommand'),
+                ('~/goal', '/goal_pose'),
+                ('/mux/autoCommand', '/vrep/safeCommand'),
                 ],
             output='screen'),
 

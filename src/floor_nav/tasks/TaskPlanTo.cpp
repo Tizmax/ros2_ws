@@ -18,7 +18,7 @@ TaskIndicator TaskPlanTo::initialise()
     error.x = NAN;
     publish_time = getNode()->get_clock()->now();
     RCLCPP_INFO(getNode()->get_logger(),"Going to %.2f %.2f",cfg->goal_x,cfg->goal_y);
-    goalPub = getNode()->create_publisher<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1);
+    goalPub = getNode()->create_publisher<geometry_msgs::msg::PoseStamped>("~/goal",1);
     trackSub = getNode()->create_subscription<geometry_msgs::msg::Pose2D>("/path_follower/error",1,
             std::bind(&TaskPlanTo::error_cb, this, std::placeholders::_1));
     return TaskStatus::TASK_INITIALISED;

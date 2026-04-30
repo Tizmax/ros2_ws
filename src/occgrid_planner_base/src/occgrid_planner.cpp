@@ -177,18 +177,23 @@ class OccupancyGridPlanner : public rclcpp::Node {
                     cv::resize(cropped_og_,resized_og,new_size);
                     cv::imshow( "OccGrid", resized_og );
                 } else {
-                    // cv::imshow( "OccGrid", cropped_og_ );
+                    cv::imshow( "OccGrid", cropped_og_ );
                     cv::imshow( "OccGrid", og_rgb_ );
                 }
             }
 
 
-            create_frontier_points(og_, msg->info.height, msg->info.width);
+            // create_frontier_points(og_, msg->info.height, msg->info.width);
 
         }
         
-        void exploration_step() {
+        void exploration_step(bool new_step=true) {
             if (do_explore_) {
+                if (new_step) {
+                    int height = og_.rows;
+                    int width = og_.cols;
+                    create_frontier_points(og_, height, width);
+                }
                 try {
                     geometry_msgs::msg::TransformStamped transformStamped;
                     transformStamped = tf_buffer->lookupTransform(frame_id_, base_link_, tf2::TimePointZero);
@@ -223,8 +228,9 @@ class OccupancyGridPlanner : public rclcpp::Node {
                     }
                 }
             }
-
-            cv::imshow( "frontier", frontier_points *255);
+            if (!headless_) {
+                cv::imshow( "frontier", frontier_points *255);
+            }
         }
 
 
@@ -257,6 +263,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
         cv::Point2i selectOptimalPoint(const cv::Point3i& robot_position) {
 
             if (frontier_points_vector.empty()) {
+                RCLCPP_INFO(this->get_logger(), "No frontier points available");
                 return cv::Point2i(robot_position.x, robot_position.y); // there is no optimal point in this case
             }
 
@@ -275,7 +282,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
 
                 // weights 
                 float distance_weight = 1.0; 
-                float gain_weight  = 2.0;
+                float gain_weight  = 1.0;
 
                 float score = distance_weight * dist - gain_weight * gain;
 
@@ -328,16 +335,17 @@ class OccupancyGridPlanner : public rclcpp::Node {
                     transformStamped = tf_buffer->lookupTransform(frame_id_, msg->header.frame_id, msg->header.stamp);
                     tf2::doTransform(*msg,pose,transformStamped);
 
-                    // this gets the current pose in transform
+                    // this gets the robot pose at the same time as the goal to ensure alignment
                     if (!tf_buffer->canTransform(frame_id_, base_link_, msg->header.stamp,
                                 rclcpp::Duration(std::chrono::duration<double>(1.0)),&errStr)) {
                         RCLCPP_ERROR(this->get_logger(),"Cannot transform base_link: %s",errStr.c_str());
                         return;
                     }
-                    transformStamped = tf_buffer->lookupTransform(frame_id_, base_link_, tf2::TimePointZero);
+                    transformStamped = tf_buffer->lookupTransform(frame_id_, base_link_, msg->header.stamp);
                 }
                 catch (const tf2::TransformException & ex){
                     RCLCPP_ERROR(this->get_logger(),"%s",ex.what());
+                    return;
                 }
             }
             // Now scale the target to the grid resolution and shift it to the
@@ -504,6 +512,13 @@ class OccupancyGridPlanner : public rclcpp::Node {
                 // No path found
                 RCLCPP_ERROR(this->get_logger(),"No path found from (%d, %d, %d) to (%d, %d, %d)",
                         start.x,start.y,start.z,target.x,target.y,target.z);
+
+                cv::Point2i target_2d = cv::Point2i(target.x, target.y);
+                auto it = std::find(frontier_points_vector.begin(), frontier_points_vector.end(), target_2d);
+                if (it != frontier_points_vector.end()) {
+                    frontier_points_vector.erase(it);
+                }
+                exploration_step(false); 
                 return;
             }
             RCLCPP_INFO(this->get_logger(),"Planning completed");

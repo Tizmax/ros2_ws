@@ -90,7 +90,7 @@ class PathFollower : public rclcpp::Node {
             result.x = error.pose.position.x;
             result.y = error.pose.position.y;
             result.theta = tf2::getYaw(error.pose.orientation);
-            RCLCPP_INFO(this->get_logger(),"Current error: %+6.2f %+6.2f %+6.2f",result.x,result.y,result.theta*180./M_PI);
+            // RCLCPP_INFO(this->get_logger(),"Current error: %+6.2f %+6.2f %+6.2f",result.x,result.y,result.theta*180./M_PI);
             return result;
         }
 
@@ -138,9 +138,9 @@ class PathFollower : public rclcpp::Node {
             pose2d_pub_ = this->create_publisher<geometry_msgs::msg::Pose2D>("~/error",1);
 
 
-            goal_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1,
+            goal_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("~/goal",1,
                 std::bind(&PathFollower::goal_cb,this,std::placeholders::_1));
-            goal_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/move_base_simple/goal",1);
+            goal_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("~/goal",1);
 
             timer_ = this->create_wall_timer( std::chrono::duration<double>(period_),
                     std::bind(&PathFollower::timer_cb, this));
@@ -217,7 +217,7 @@ class PathFollower : public rclcpp::Node {
                 }
 
                 geometry_msgs::msg::Twist twist;
-                if (final && (error.x < 0.1)) {
+                if (final && (abs(error.x) < 0.1) && (abs(error.y) < 0.1) && (abs(error.theta) < M_PI/18)) {
                     // Finished
                     twist.linear.x = 0.0;
                     twist.angular.z = 0.0;

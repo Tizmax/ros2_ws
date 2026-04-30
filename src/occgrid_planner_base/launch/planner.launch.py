@@ -51,9 +51,9 @@ def generate_launch_description():
 
         launch_ros.actions.Node(
             package='topic_tools', executable='mux', name='cmd_mux',
-            arguments=['/vrep/twistCommand','/teleop/twistCommand','/mux/autoCommand'],
+            arguments=['/vrep/safeCommand','/teleop/twistCommand','/mux/autoCommand'],#/vrep/twistCommand
             parameters=[
-                {'output_topic': '/vrep/twistCommand'},
+                {'output_topic': '/vrep/safeCommand'}, #/vrep/twistCommand
                 {'input_topics': ['/teleop/twistCommand','/mux/autoCommand']},
                 ],
             output='screen'),
@@ -89,7 +89,7 @@ def generate_launch_description():
             package='occgrid_planner_base', executable='occgrid_planner_base', name='occgrid_planner',
             parameters=[
                 {'~/neighbourhood': 8},
-                {'~/base_frame': 'bubbleRob'},
+                {'~/base_frame': 'base_link'},
                 {'~/debug': False},
                 {'~/headless': False},
                 ],
@@ -115,18 +115,18 @@ def generate_launch_description():
             package='occgrid_planner_base', executable='path_follower_base', name='path_follower',
             parameters=[
                 {'~/Kx': 1.0},
-                {'~/Ky': 0.0},
+                {'~/Ky': -1.0},
                 {'~/Ktheta': 1.0},
                 {'~/max_rot_speed': 1.0},
-                {'~/max_velocity': 0.5},
+                {'~/max_velocity': 0.3},
                 {'~/max_y_error': 1.0},
-                {'~/max_error': 0.5},
-                {'~/look_ahead': 1.0},
-                {'~/base_frame': 'bubbleRob'},
+                {'~/max_error': 0.1},
+                {'~/look_ahead': 0.2},
+                {'~/base_frame': 'base_link'},
                 ],
             remappings=[
                 ('~/traj', '/path_optimizer/trajectory'),
-                ('~/twistCommand', '/mux/autoCommand'),
+                ('~/twistCommand', '/vrep/safeCommand'),
                 ('~/goal', '/goal_pose'),
                 ],
             output='screen'),

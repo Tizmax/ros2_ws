@@ -43,17 +43,6 @@ target_link_libraries(occgrid_planner_base PUBLIC
     ${OpenCV_LIBRARIES}
 )
 
-add_executable(explorer_base src/explorer.cpp)
-target_include_directories(explorer_base PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-target_compile_features(explorer_base PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-target_link_libraries(explorer_base PUBLIC
-    ${geometry_msgs_TARGETS}
-    rclcpp::rclcpp
-    tf2_geometry_msgs::tf2_geometry_msgs
-)
-
 add_executable(path_optimizer_base src/path_optimizer.cpp)
 target_include_directories(path_optimizer_base PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -90,7 +79,7 @@ target_link_libraries(path_follower_base PUBLIC
     tf2_ros::tf2_ros
 )
 
-install(TARGETS occgrid_planner_base explorer_base path_optimizer_base path_follower_base
+install(TARGETS occgrid_planner_base path_optimizer_base path_follower_base
   DESTINATION lib/${PROJECT_NAME})
 
 install(
