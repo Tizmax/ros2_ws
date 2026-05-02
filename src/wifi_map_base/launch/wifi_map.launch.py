@@ -46,7 +46,8 @@ import launch_ros.descriptions
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
-    bssid = LaunchConfiguration('bssid', default='5C:A6:E6:34:74:E6')
+    # bssid = LaunchConfiguration('bssid', default='5C:A6:E6:34:74:E6')
+    bssid = LaunchConfiguration('bssid', default='28:C6:8E:85:8F:2E')
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
@@ -54,7 +55,7 @@ def generate_launch_description():
             description='Use simulation (Gazebo, Bag) clock if true'),
         DeclareLaunchArgument(
             'bssid',
-            default_value='5C:A6:E6:34:74:E6',
+            default_value='28:C6:8E:85:8F:2E',
             description='bssid to track'),
 
         launch_ros.actions.Node(

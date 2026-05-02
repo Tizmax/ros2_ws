@@ -205,7 +205,7 @@ class WifiMapNode : public rclcpp::Node {
             cv::threshold(og_,binary_og, 1, 255, cv::THRESH_BINARY);
             cv::Mat_<int> labelImage(binary_og.size());
             int nLabels = connectedComponents(binary_og, labelImage, 8);
-            RCLCPP_INFO(this->get_logger(),"Extracted OG connected components: %d components",nLabels);
+            // RCLCPP_INFO(this->get_logger(),"Extracted OG connected components: %d components",nLabels);
 #endif
 
         }

@@ -11,6 +11,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     turtlebot_launch_dir = get_package_share_directory("turtlebot_launch")
     occgrid_planner_dir = get_package_share_directory("occgrid_planner_base")
+    wifi_map_dir = get_package_share_directory("wifi_map_base")
 
     slam_tb_sync = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -21,6 +22,12 @@ def generate_launch_description():
     planner = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(occgrid_planner_dir, 'planner.launch.py')
+        )
+    )
+
+    wifi_map = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(wifi_map_dir, "wifi_map.launch.py")
         )
     )
 
@@ -43,5 +50,6 @@ def generate_launch_description():
     return LaunchDescription([
         slam_tb_sync,
         planner,
+        wifi_map,
         collision_avoidance,
     ])

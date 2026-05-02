@@ -72,6 +72,11 @@ class PathFollower : public rclcpp::Node {
         geometry_msgs::msg::Pose2D computeError(const rclcpp::Time & now, const cs7630_msgs::msg::TrajectoryElement & te) {
             geometry_msgs::msg::TransformStamped transformStamped;
             try {
+                // Check that frame_id_ has been set (it comes from trajectory messages)
+                if (frame_id_.empty()) {
+                    RCLCPP_ERROR(this->get_logger(),"Cannot compute error: frame_id not set. Waiting for trajectory message.");
+                    return geometry_msgs::msg::Pose2D();
+                }
                 std::string errStr;
                 if (!tf_buffer->canTransform(base_frame_,frame_id_,now,rclcpp::Duration(1s),&errStr)) {
                     RCLCPP_ERROR(this->get_logger(),"Cannot transform target: %s",errStr.c_str());

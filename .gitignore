@@ -6,6 +6,9 @@ data/
 
 # rendus
 *.zip
+*.pgm
+*.yaml
+*.png
 
 #trucs bizarres
 *.pcd
