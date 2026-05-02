@@ -107,20 +107,16 @@ class CollisionAvoidance : public rclcpp::Node {
                         res.linear.x = 0.0;
                         continue;
                     }
-                //     if (x > - safety_diameter) {
-                //         res.linear.x = 0.0;
-                //     } else if (x > - ignore_diameter) {
-                //         res.linear.x = std::max(res.linear.x, -max_velocity/(ignore_diameter - safety_diameter)*(abs(x) - safety_diameter));
-                //     } else {
-                //         res.linear.x = std::max(res.linear.x, -max_velocity);
-                //     }
                 }
 
 
                 // RCLCPP_INFO(this->get_logger(),"%d %.3f %.3f",i,x,y);
             }
 
-            RCLCPP_INFO(this->get_logger(),"Speed limiter: desired %.2f controlled %.2f; min_distances: %.2f",desired.linear.x,res.linear.x,min_distance);
+            if (abs(desired.linear.x - res.linear.x) > 1e-2) {
+                RCLCPP_INFO(this->get_logger(),"Speed limiter: desired %.2f controlled %.2f; min_distances: %.2f",desired.linear.x,res.linear.x,min_distance);
+            }
+
             return res;
         }
 

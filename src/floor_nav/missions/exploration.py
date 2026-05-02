@@ -8,15 +8,26 @@ from task_manager_client_py.TaskClient import *
 import tf2_ros
 from tf_transformations import euler_from_quaternion
 from std_srvs.srv import SetBool
+from geometry_msgs.msg import PoseStamped, Point, Pose, Pose2D
 
 
 rclpy.init(args=sys.argv)
 tc = TaskClient('/floor_tasks', 0.2)
 
-tc.tf_buffer = tf2_ros.Buffer()
-tc.tf_listener = tf2_ros.TransformListener(tc.tf_buffer, tc)
-tc.enable_explorer_client = tc.create_client(SetBool, '/occgrid_planner/enable_explorer')
+# --------------------- Global Variables ---------------------
+going_base = False
 
+# --------------------- Constants ---------------------
+MIN_BATTERY_LEVEL = 0.2
+MAX_EXPLORATION_TIME = 60.0
+NOTHING_LEFT_TO_EXPLORE = False
+
+# --------------------- Utils ---------------------
+def error_callback(msg):
+    global going_base
+    if going_base:
+        if msg.x < 0.1 and msg.y < 0.1 and msg.theta < pi/18:
+            going_base = False
 
 def set_explorer_enabled(enable):
     request = SetBool.Request()
@@ -37,11 +48,13 @@ def set_explorer_enabled(enable):
 
     tc.get_logger().info(response.message)
 
+# ---------------------  ---------------------
+tc.tf_buffer = tf2_ros.Buffer()
+tc.tf_listener = tf2_ros.TransformListener(tc.tf_buffer, tc)
+tc.enable_explorer_client = tc.create_client(SetBool, '/occgrid_planner/enable_explorer')
+tc.goalPub = tc.create_publisher(PoseStamped, '/goal_pose', 1)
+tc.errorSub = tc.create_subscription(Pose2D, '/path_follower/error', error_callback, 1)
 
-# Constansts
-MIN_BATTERY_LEVEL = 0.2
-MAX_EXPLORATION_TIME = 30.0
-NOTHING_LEFT_TO_EXPLORE = False
 
 
 # --------------------- UNDOCKING ---------------------
@@ -68,9 +81,6 @@ set_explorer_enabled(True)
 
 start_time = rclpy.clock.Clock().now()
 
-# # Start EnableExplorer 
-# tc.TaskEnableExplorer()
-
 while True:
 
     # Check if we have reached the maximum exploration time
@@ -94,31 +104,44 @@ while True:
     tc.Wait(duration=1.0)
 
 # # stop the exploration task   
-# # tc.TaskDisableExplorer()
-# tc.get_logger().info("Exploration completed")
-
-# set_explorer_enabled(False)
+set_explorer_enabled(False)
 
 
 # # --------------------- BACK TO BASE ---------------------
 
-# constant = tc.Constant(linear=0.5,angular=0.0,duration=5)
 
-base_x = start_tf.transform.translation.x
-base_y = start_tf.transform.translation.y
-q = [start_tf.transform.rotation.x, start_tf.transform.rotation.y, start_tf.transform.rotation.z, start_tf.transform.rotation.w]
-_, _, base_theta = euler_from_quaternion(q)
+position = start_tf.transform.translation
+tc.get_logger().info(f"Plan to {position}")
 
+rotation = start_tf.transform.rotation
+q = [rotation.x, rotation.y, rotation.z, rotation.w]
+_, _, start_yaw = euler_from_quaternion(q)
+tc.get_logger().info(f"Start yaw: {start_yaw:.3f} rad")
 
+# goal_msg = PoseStamped()
+# goal_msg.header.frame_id = "map"
+# goal_msg.header.stamp = tc.get_clock().now().to_msg()
+# goal_msg.pose.position = position
+# goal_msg.pose.orientation = start_tf.transform.rotation
+# tc.goalPub.publish(goal_msg)
+# tc.get_logger().info("Back to base completed")
 
-tc.get_logger().info(f"Plan to ({base_x}, {base_y}, {base_theta})")
+# going_base = True
+# while going_base:
+#     tc.Wait(duration=1.0)
 
-tc.PlanTo(goal_x=base_x, goal_y=base_y, goal_theta=base_theta)
-tc.get_logger().info("Back to base completed")
+tc.PlanToEssential(goal_x=position.x, goal_y=position.y, goal_theta=start_yaw, dist_threshold=0.1)
 
 # --------------------- DOCKING ---------------------
+for i in range(3):
+    tc.get_logger().info(f"try {i+1} to dock...")
+    try:
+        tc.AutoDock(task_timeout=30.0)
+        tc.get_logger().info(f"try {i+1} succeeded")
+    except TaskException as e: 
+        tc.get_logger().info(f"try {i+1} failed: {e}")
+        constant = tc.Constant(linear=-0.1,angular=0.0,duration=7.5)
 
-tc.AutoDock()
 
 tc.get_logger().info("Docking completed")
 

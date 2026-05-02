@@ -34,6 +34,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from math import pi
 
 import launch_ros.actions
 import launch_ros.descriptions
@@ -92,6 +93,7 @@ def generate_launch_description():
                 {'~/base_frame': 'base_link'},
                 {'~/debug': False},
                 {'~/headless': False},
+                {'~/robot_radius': 0.35},
                 ],
             remappings=[
                 ('~/occ_grid', '/map'),
@@ -103,8 +105,9 @@ def generate_launch_description():
             package='occgrid_planner_base', executable='path_optimizer_base', name='path_optimizer',
             parameters=[
                 {'~/max_acceleration': 0.3},
-                {'~/max_braking': 0.1},
+                {'~/max_braking': 0.2},
                 {'~/velocity': 0.5},
+                {'~/max_rot_speed': 2.0},
                 ],
             remappings=[
                 ('~/path', '/occgrid_planner/path'),
@@ -114,19 +117,22 @@ def generate_launch_description():
         launch_ros.actions.Node(
             package='occgrid_planner_base', executable='path_follower_base', name='path_follower',
             parameters=[
-                {'~/Kx': 1.0},
-                {'~/Ky': -1.0},
+                {'~/Kx': 5.0},
+                {'~/Ky': 1.0},
                 {'~/Ktheta': 1.0},
-                {'~/max_rot_speed': 1.0},
-                {'~/max_velocity': 0.3},
+                {'~/max_rot_speed': 2.0},
+                {'~/max_velocity': 0.5},
                 {'~/max_y_error': 1.0},
-                {'~/max_error': 0.1},
-                {'~/look_ahead': 0.2},
+                {'~/max_error': 1.0},
+                {'~/max_angular_error': pi/2},
+                {'~/look_ahead': 1.0},
                 {'~/base_frame': 'base_link'},
+                {'~/replan_period': 200.0},
+                {'~/max_tracking_delay': 5.0},
                 ],
             remappings=[
                 ('~/traj', '/path_optimizer/trajectory'),
-                ('~/twistCommand', '/vrep/safeCommand'),
+                ('~/twistCommand', '/mux/autoCommand'),
                 ('~/goal', '/goal_pose'),
                 ],
             output='screen'),

@@ -123,6 +123,7 @@ add_task(TaskConstant)
 add_task(TaskGoTo)
 add_task(TaskSetHeading)
 add_task(TaskPlanTo)
+add_task(TaskPlanToEssential)
 add_task(TaskWaitForROI)
 add_task(TaskWander)
 add_task(TaskAutoDock)
@@ -155,6 +156,7 @@ install(
 
 
 install(PROGRAMS  
+	missions/exploration.py
 	missions/graph_forever.py
 	missions/test_goto.py
 	missions/test_gotopose.py

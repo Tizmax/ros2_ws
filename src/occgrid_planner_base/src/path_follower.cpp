@@ -35,6 +35,7 @@ class PathFollower : public rclcpp::Node {
         double max_velocity_;
         double max_y_error_;
         double max_error_;
+        double max_angular_error_;
         double max_tracking_delay_;
         double replan_period_;
         double period_;
@@ -105,6 +106,7 @@ class PathFollower : public rclcpp::Node {
             this->declare_parameter("~/max_velocity",1.0);
             this->declare_parameter("~/max_y_error",1.0);
             this->declare_parameter("~/max_error",0.5);
+            this->declare_parameter("~/max_angular_error",M_PI/3);
             this->declare_parameter("~/max_tracking_delay",3.0);
             this->declare_parameter("~/period",0.050);
             this->declare_parameter("~/replan_period",100.0);
@@ -119,6 +121,7 @@ class PathFollower : public rclcpp::Node {
             max_velocity_ = this->get_parameter("~/max_velocity").as_double();
             max_y_error_ = this->get_parameter("~/max_y_error").as_double();
             max_error_ = this->get_parameter("~/max_error").as_double();
+            max_angular_error_ = this->get_parameter("~/max_angular_error").as_double();
             max_tracking_delay_ = this->get_parameter("~/max_tracking_delay").as_double();
             period_ = this->get_parameter("~/period").as_double();
             replan_period_ = this->get_parameter("~/replan_period").as_double();
@@ -200,7 +203,7 @@ class PathFollower : public rclcpp::Node {
                 // Compute the tracking error and 
                 geometry_msgs::msg::Pose2D error = computeError(now,it->second);
                 pose2d_pub_->publish(error);
-                if (hypot(error.x,error.y)>max_error_) {      
+                if (hypot(error.x,error.y)>max_error_ || abs(error.theta) > max_angular_error_) {      
                     // TODO: Manage the fact that the error has good too far.
                     // We need to make the carrot stop by delaying the requested time by 
                     // one time period (period_).
@@ -209,12 +212,13 @@ class PathFollower : public rclcpp::Node {
                     // Freeze/slow the carrot by accumulating effective delay.
                     tracking_delay_ = std::min(tracking_delay_ + period_, max_tracking_delay_);
                     if (tracking_delay_ >= max_tracking_delay_) {
-                        // should_replan = true;
+                        should_replan = true;
                     }
                 } else if (tracking_delay_ > 0.0) {
                     // Recover gradually once tracking error is back under control.
                     tracking_delay_ = std::max(0.0, tracking_delay_ - period_);
                 }
+                // RCLCPP_INFO(this->get_logger(),"tracking delay: %.2f sec / %.2f sec", tracking_delay_, max_tracking_delay_);
 
                 geometry_msgs::msg::Twist twist;
                 if (final && (abs(error.x) < 0.1) && (abs(error.y) < 0.1) && (abs(error.theta) < M_PI/18)) {
@@ -222,6 +226,8 @@ class PathFollower : public rclcpp::Node {
                     twist.linear.x = 0.0;
                     twist.angular.z = 0.0;
                     // We're done
+                    RCLCPP_INFO(this->get_logger(),"Final position reached, stopping with error: %.2f %.2f %.2f",error.x,error.y,error.theta);
+
                     traj_.clear();
                 } else {
                     twist.linear.x = it->second.twist.linear.x + Kx_ * error.x;
