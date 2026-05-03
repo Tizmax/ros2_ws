@@ -9,6 +9,7 @@ data/
 *.pgm
 *.yaml
 *.png
+*.mkv
 
 #trucs bizarres
 *.pcd

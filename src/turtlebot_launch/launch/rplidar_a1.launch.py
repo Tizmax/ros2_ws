@@ -14,7 +14,7 @@ def generate_launch_description():
     channel_type =  LaunchConfiguration('channel_type', default='serial')
     serial_port = LaunchConfiguration('serial_port', default='/dev/rplidar')
     serial_baudrate = LaunchConfiguration('serial_baudrate', default='115200')
-    frame_id = LaunchConfiguration('frame_id', default='laser')
+    frame_id = LaunchConfiguration('frame_id', default='rplidar')
     inverted = LaunchConfiguration('inverted', default='false')
     angle_compensate = LaunchConfiguration('angle_compensate', default='true')
     scan_mode = LaunchConfiguration('scan_mode', default='Sensitivity')
@@ -55,10 +55,14 @@ def generate_launch_description():
             default_value=scan_mode,
             description='Specifying scan mode of lidar'),
 
+        Node(
+            package = "tf2_ros",
+            executable = "static_transform_publisher",
+            arguments = ["-0.028", "0", "0.051", "3.1", "0", "0", "plate_2_link", "rplidar"]),
 
         Node(
             package='rplidar_ros',
-            executable='rplidar_node',
+            executable='rplidar_composition',
             name='rplidar_node',
             parameters=[{'channel_type':channel_type,
                          'serial_port': serial_port,
