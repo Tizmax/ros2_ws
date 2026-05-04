@@ -93,7 +93,7 @@ def generate_launch_description():
                 {'~/base_frame': 'base_link'},
                 {'~/debug': False},
                 {'~/headless': False},
-                {'~/robot_radius': 0.2},
+                {'~/robot_radius': 0.35},
                 ],
             remappings=[
                 ('~/occ_grid', '/map'),
@@ -123,7 +123,7 @@ def generate_launch_description():
                 {'~/max_rot_speed': 2.0},
                 {'~/max_velocity': 0.3},
                 {'~/max_y_error': 1.0},
-                {'~/max_error': 1.0},
+                {'~/max_error': 0.5},
                 {'~/max_angular_error': pi/18},
                 {'~/look_ahead': 1.0},
                 {'~/base_frame': 'base_link'},

@@ -36,7 +36,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
         rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr og_sub_;
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_sub_;
         rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
-        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr optimal_target_pub_;
+        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pub_;
         rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr explorer_service_;
         rclcpp::TimerBase::SharedPtr timer_;
         rclcpp::TimerBase::SharedPtr timer_exploration_;
@@ -194,6 +194,31 @@ class OccupancyGridPlanner : public rclcpp::Node {
                     int width = og_.cols;
                     create_frontier_points(og_, height, width);
                 }
+
+                // try {
+
+                //     geometry_msgs::msg::TransformStamped transformStamped;
+                //     transformStamped = tf_buffer->lookupTransform(frame_id_, base_link_, tf2::TimePointZero);
+                
+                //     double s_yaw = tf2::getYaw(transformStamped.transform.rotation);
+                //     cv::Point2i start_2d = cv::Point2i(transformStamped.transform.translation.x / info_.resolution, 
+                //             transformStamped.transform.translation.y / info_.resolution) + og_center_;
+                //     cv::Point3i start = cv::Point3i(start_2d.x, start_2d.y, angle_to_index(s_yaw));
+
+                //     cv::Point2i optimal_target_2d = selectOptimalPoint(start);
+                //     cv::Point3i optimal_target = cv::Point3i(optimal_target_2d.x, optimal_target_2d.y, angle_to_index(0));
+                    
+
+                //     rclcpp::Time now  = this->get_clock()->now();
+
+                //     geometry_msgs::msg::PoseStamped msg;
+                //     msg.header.stamp = now;
+                //     msg.header.frame_id = "map";
+                //     msg.pose.position.x = (optimal_target_2d.x - og_center_.x) * info_.resolution;
+                //     msg.pose.position.y = (optimal_target_2d.y - og_center_.y) * info_.resolution;
+                //     tf2::Quaternion q; q.setRPY(0,0,0);
+                //     msg.pose.orientation = tf2::toMsg(q);
+                //     goal_pub_->publish(msg);
                 try {
                     geometry_msgs::msg::TransformStamped transformStamped;
                     transformStamped = tf_buffer->lookupTransform(frame_id_, base_link_, tf2::TimePointZero);
@@ -206,6 +231,13 @@ class OccupancyGridPlanner : public rclcpp::Node {
                     cv::Point2i optimal_target_2d = selectOptimalPoint(start);
                     cv::Point3i optimal_target = cv::Point3i(optimal_target_2d.x, optimal_target_2d.y, angle_to_index(0));
                     
+                    
+                    if (og_(start_2d) != FREE) {
+                        RCLCPP_ERROR(this->get_logger(),"Invalid start point: occupancy = %d",og_(start_2d));
+                        return;
+                        // og_(start_2d) = FREE;
+                    }
+
                     planToPixelTarget(start, optimal_target);
                 
                 } catch (const tf2::TransformException & ex) {
@@ -282,7 +314,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
 
                 // weights 
                 float distance_weight = 1.0; 
-                float gain_weight  = 1.0;
+                float gain_weight  = 3.0;
 
                 float score = distance_weight * dist - gain_weight * gain;
 
@@ -406,6 +438,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
             if (og_(start_2d) != FREE) {
                 RCLCPP_ERROR(this->get_logger(),"Invalid start point: occupancy = %d",og_(start_2d));
                 return;
+                // og_(start_2d) = FREE;
             }
             RCLCPP_INFO(this->get_logger(),"Starting planning from (%d, %d) to (%d, %d)",start.x,start.y, target.x, target.y);
 
@@ -578,7 +611,7 @@ class OccupancyGridPlanner : public rclcpp::Node {
             target_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>("~/goal",1,
                     std::bind(&OccupancyGridPlanner::target_callback,this,std::placeholders::_1));
             path_pub_ = this->create_publisher<nav_msgs::msg::Path>("~/path",1);
-            optimal_target_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("~/optimal_target",1);
+            goal_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("~/goal",1);
             
             explorer_service_ = this->create_service<std_srvs::srv::SetBool>(
                     "~/enable_explorer",

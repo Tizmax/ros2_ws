@@ -133,7 +133,7 @@ def generate_launch_description():
             parameters=[
                 {'lib_path': os.path.join(os.getenv("HOME"),"ros2_ws/install/floor_nav/lib/floor_nav")},
                 {'base_frame': 'base_link'},
-                {'reference_frame': 'odom'},
+                {'reference_frame': 'map'},
                 ],
             remappings=[
                 # ('~/clouds3d', '/points'),

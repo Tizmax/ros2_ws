@@ -127,11 +127,11 @@ _, _, start_yaw = euler_from_quaternion(q)
 tc.get_logger().info(f"Start yaw: {start_yaw:.3f} rad")
 
 try:
-    tc.PlanToEssential(goal_x=position.x, goal_y=position.y, goal_theta=start_yaw, dist_threshold=0.1, task_timeout=60.0)
+    tc.PlanToEssential(goal_x=position.x, goal_y=position.y, goal_theta=start_yaw, dist_threshold=0.1, task_timeout=120.0)
 except TaskException as e:
     tc.get_logger().info(f"Failed to plan back to base: {e}")
 
-tc.GoToPose(goal_x=position.x,goal_y=position.y,goal_theta=start_yaw,max_velocity=0.3,k_v=0.3,max_angular_velocity=0.3, smart_control=False)
+tc.GoToPose(goal_x=position.x,goal_y=position.y,goal_theta=start_yaw,max_velocity=0.3,k_v=0.3,max_angular_velocity=0.3, smart_control=False, task_timeout=60.0)
 
 
 # --------------------- DOCKING ---------------------

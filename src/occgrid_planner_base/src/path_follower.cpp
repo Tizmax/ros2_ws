@@ -168,7 +168,7 @@ class PathFollower : public rclcpp::Node {
             geometry_msgs::msg::PoseStamped goal = goal_;
             goal.header.stamp = this->get_clock()->now();
             goal_pub_->publish(goal);
-            RCLCPP_INFO(this->get_logger(),"Replan requested by republishing current goal");
+            RCLCPP_INFO(this->get_logger(),"Replan requested by republishing current goal %s", goal.header.frame_id.c_str());
         }
 
         void timer_cb() {
@@ -218,6 +218,7 @@ class PathFollower : public rclcpp::Node {
                     tracking_delay_ = std::min(tracking_delay_ + period_, max_tracking_delay_);
                     if (tracking_delay_ >= max_tracking_delay_) {
                         should_replan = true;
+                        tracking_delay_ = 0.0;
                     }
                 } else if (tracking_delay_ > 0.0) {
                     // Recover gradually once tracking error is back under control.
